@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // "works"コレクションのルール
+    match /works/{workId} {
+      // 票数の読み取りは誰でも許可
+      allow read: if true;
+      // 書き込み（票の追加）は一切クライアントからは許可しない！
+      // (Firebase Functionsからの変更のみが許可される)
+      allow write: if false; 
+    }
+
+    // "votes"コレクションのルール
+    match /votes/{userId} {
+      // 自分の投票記録は、本人のみ読み書き可能
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

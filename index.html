@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGRI VISION 2125 投票ページ</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --primary-color: #0d1b2a; --secondary-color: #1b263b; --accent-color: #00f5d4; --text-color: #e0e1dd; }
+        body { background-color: var(--primary-color); color: var(--text-color); font-family: 'Noto Sans JP', sans-serif; margin: 0; text-align: center; }
+        .header { padding: 20px; border-bottom: 3px solid var(--accent-color); position: relative; }
+        .main-title { font-family: 'Orbitron', sans-serif; font-size: 2.5rem; color: #fff; text-shadow: 0 0 15px var(--accent-color); }
+        .auth-container { position: absolute; top: 20px; right: 20px; }
+        #login-btn, #logout-btn { background-color: var(--accent-color); color: var(--primary-color); border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        #user-info { display: flex; align-items: center; gap: 15px; color: #fff; font-weight: bold; }
+        .works-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; padding: 40px; max-width: 1200px; margin: 0 auto; }
+        .work-card { background-color: var(--secondary-color); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .work-card img { width: 100%; height: auto; display: block; }
+        .card-content { padding: 20px; text-align: left; }
+        .card-title { font-size: 1.4rem; font-weight: bold; margin: 0 0 10px; }
+        .card-creator { font-size: 0.9rem; color: var(--accent-color); margin-bottom: 15px; }
+        .vote-section { display: flex; justify-content: space-between; align-items: center; }
+        .vote-count { font-size: 1.2rem; font-weight: bold; color: var(--accent-color); }
+        .vote-button { background-color: #0d6efd; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        .vote-button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .vote-button.voted { background-color: #198754; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1 class="main-title">AGRI VISION 2125 投票</h1>
+        <div class="auth-container">
+            <button id="login-btn">Googleでログイン</button>
+            <div id="user-info" style="display: none;">
+                <span id="user-name"></span>
+                <button id="logout-btn">ログアウト</button>
+            </div>
+        </div>
+    </header>
+    <main>
+        <p style="margin-top: 30px;">ログインして、お気に入りの作品に投票してください！</p>
+        <div class="works-container" id="works-container"></div>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ★★★ ここに、あなたの「agri-vote-final」プロジェクトのConfigを貼り付けてください ★★★
+        const firebaseConfig = {
+  apiKey: "AIzaSyDQkt-ASdOmjR03cRWaPKsAr3xgsBiyTRY",
+  authDomain: "agri-vote-final.firebaseapp.com",
+  projectId: "agri-vote-final",
+  storageBucket: "agri-vote-final.firebasestorage.app",
+  messagingSenderId: "102828651366",
+  appId: "1:102828651366:web:5de60869fd6e8b4615cea7"
+};
+        // ★★★ ここまで ★★★
+
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        const worksData = [
+            { creator: "クリエイターA", title: "未来の畑", videoId: "I5k9aFaCxUo" },
+            { creator: "クリエイターB", title: "宇宙トマト", videoId: "Yg9nDdVlxXQ" },
+            { creator: "クリエイターC", title: "AI農園", videoId: "5miEdVNbXdw" },
+        ];
+
+        const worksContainer = document.getElementById('works-container');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userInfo = document.getElementById('user-info');
+        const userName = document.getElementById('user-name');
+        let currentUser = null;
+
+        auth.onAuthStateChanged(user => {
+            currentUser = user;
+            if (user) {
+                userInfo.style.display = 'flex';
+                userName.textContent = user.displayName;
+                loginBtn.style.display = 'none';
+            } else {
+                userInfo.style.display = 'none';
+                loginBtn.style.display = 'block';
+            }
+            updateVoteButtonsUI();
+        });
+
+        loginBtn.addEventListener('click', () => {
+            auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(error => console.error("Login Error:", error));
+        });
+
+        logoutBtn.addEventListener('click', () => auth.signOut());
+
+        function renderWorks() {
+            worksContainer.innerHTML = '';
+            worksData.forEach(work => {
+                const card = document.createElement('div');
+                card.className = 'work-card';
+                card.innerHTML = `
+                    <img src="https://i.ytimg.com/vi/${work.videoId}/hqdefault.jpg" alt="${work.title}">
+                    <div class="card-content">
+                        <h3 class="card-title">${work.title}</h3>
+                        <p class="card-creator">👤 ${work.creator}</p>
+                        <div class="vote-section">
+                            <span class="vote-count" id="count-${work.videoId}">0</span> 票
+                            <button class="vote-button" data-work-id="${work.videoId}" disabled>投票する</button>
+                        </div>
+                    </div>
+                `;
+                worksContainer.appendChild(card);
+            });
+            document.querySelectorAll('.vote-button').forEach(button => button.addEventListener('click', handleVote));
+        }
+        
+        db.collection('works').onSnapshot(snapshot => {
+            snapshot.docs.forEach(doc => {
+                const countEl = document.getElementById(`count-${doc.id}`);
+                if (countEl) {
+                    countEl.textContent = doc.data().votes || 0;
+                }
+            });
+        });
+
+        async function updateVoteButtonsUI() {
+            const buttons = document.querySelectorAll('.vote-button');
+            if (!currentUser) {
+                buttons.forEach(btn => btn.disabled = true);
+                return;
+            }
+            const userVoteDoc = await db.collection('votes').doc(currentUser.uid).get();
+            if (userVoteDoc.exists) {
+                const votedWorkId = userVoteDoc.data().votedFor;
+                buttons.forEach(btn => {
+                    btn.disabled = true;
+                    if(btn.dataset.workId === votedWorkId) {
+                        btn.classList.add('voted');
+                    }
+                });
+            } else {
+                buttons.forEach(btn => btn.disabled = false);
+            }
+        }
+
+        async function handleVote(event) {
+            const workId = event.target.dataset.workId;
+            event.target.disabled = true;
+            try {
+                await db.runTransaction(async (transaction) => {
+                    const userVoteRef = db.collection('votes').doc(currentUser.uid);
+                    if ((await transaction.get(userVoteRef)).exists) {
+                        throw new Error("すでに投票済みです。");
+                    }
+                    
+                    const workRef = db.collection('works').doc(workId);
+                    transaction.set(workRef, { votes: firebase.firestore.FieldValue.increment(1) }, { merge: true });
+                    transaction.set(userVoteRef, { votedFor: workId });
+                });
+                alert('投票ありがとうございます！');
+            } catch (error) {
+                alert(error.message);
+                updateVoteButtonsUI();
+            }
+        }
+        
+        renderWorks();
+    </script>
+</body>
+</html>
